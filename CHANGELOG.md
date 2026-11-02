@@ -2,6 +2,10 @@
 
 All notable changes. Newest first. Versions match `manifest.json` → `version`.
 
+## [1.10.5] - 2026-11-02
+### Changed
+- **Already saved jobs are skipped** (not opened, not sent to the AI), like applied and dismissed jobs. Detected from the card's own "Saved" text (`isSavedCard`); gray `🔖 Saved (skipped)` badge.
+
 ## [1.10.4] - 2026-11-02
 ### Fixed
 - Jobs you already applied to were still sent to the AI when the card showed "Applied" alone on its own line. `isApplied()`

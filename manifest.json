@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Job Filter (AI)",
-  "version": "1.10.4",
+  "version": "1.10.5",
   "description": "Opens each job in a LinkedIn search page, scores it against your resume with AI, and dismisses the ones that don't fit.",
   "icons": {
     "16": "icons/icon16.png",

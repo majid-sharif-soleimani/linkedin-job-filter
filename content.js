@@ -150,6 +150,18 @@
     true
   );
 
+  // A job the user already saved shows "Saved" as its own text element on the card
+  // ("Saved", "Saved · Be an early applicant"); such jobs are not checked again.
+  const SAVED_TEXT = /^(saved|sparad|sparat)(\s*(·|•).*)?$/i;
+  function isSavedCard(card) {
+    const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (n.parentElement?.closest(".ljf-badge, button")) continue;
+      if (SAVED_TEXT.test(n.textContent.replace(/\s+/g, " ").trim())) return true;
+    }
+    return false;
+  }
+
   // "Applied" is shown as its own text element on the card: alone ("Applied"), or as
   // "Applied · 2 days ago" / "Applied on company site". Checking individual text nodes (instead of
   // the glued card text) also avoids false hits on titles such as "Applied AI Engineer".
@@ -517,10 +529,14 @@
 
         const card = findCard(jobId);
         if (!card) continue;
-        if (isDismissed(card) || isApplied(card)) {
-          const applied = isApplied(card);
-          badge(card, { label: applied ? "• Applied (skipped)" : "• Already dismissed", kind: "skip",
-            reason: applied ? "You already applied to this job" : "Already dismissed on this page" }, false, jobId);
+        if (isDismissed(card) || isApplied(card) || isSavedCard(card)) {
+          const why = isApplied(card) ? "applied" : isDismissed(card) ? "dismissed" : "saved";
+          const B = {
+            applied: ["• Applied (skipped)", "You already applied to this job"],
+            dismissed: ["• Already dismissed", "Already dismissed on this page"],
+            saved: ["🔖 Saved (skipped)", "Already saved, not checked again"]
+          }[why];
+          badge(card, { label: B[0], kind: "skip", reason: B[1] }, false, jobId);
           stats.skipped++;
           ui.stats(stats, dryRun);
           continue;
@@ -884,7 +900,7 @@
     }
     function stats(s, dry) {
       if (statsEl)
-        statsEl.textContent = `Match: ${s.match} (🔖 saved now: ${s.saved || 0}) · ${dry ? "Would dismiss" : "Dismissed"} by AI: ${s.dismissed} · by keyword: ${s.keyword || 0} · by location: ${s.location || 0} · Skipped (dismissed/applied): ${s.skipped} · Errors: ${s.errors}`;
+        statsEl.textContent = `Match: ${s.match} (🔖 saved now: ${s.saved || 0}) · ${dry ? "Would dismiss" : "Dismissed"} by AI: ${s.dismissed} · by keyword: ${s.keyword || 0} · by location: ${s.location || 0} · Skipped (dismissed/applied/saved): ${s.skipped} · Errors: ${s.errors}`;
     }
     const history = [];
     function log(head, detail, kind) {
