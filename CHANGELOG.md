@@ -2,6 +2,11 @@
 
 All notable changes. Newest first. Versions match `manifest.json` → `version`.
 
+## [1.10.4] - 2026-11-02
+### Fixed
+- Jobs you already applied to were still sent to the AI when the card showed "Applied" alone on its own line. `isApplied()`
+  now checks each text node for `Applied` / `Applied · …` / `Applied on …` (also "Ansökt"/"Sökt"), without false hits on titles like "Applied AI Engineer".
+
 ## [1.10.3] - 2026-10-24
 First public release.
 

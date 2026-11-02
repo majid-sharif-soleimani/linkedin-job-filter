@@ -150,9 +150,17 @@
     true
   );
 
+  // "Applied" is shown as its own text element on the card: alone ("Applied"), or as
+  // "Applied · 2 days ago" / "Applied on company site". Checking individual text nodes (instead of
+  // the glued card text) also avoids false hits on titles such as "Applied AI Engineer".
+  const APPLIED_TEXT = /^(applied|ansökt|sökt)(\s*(·|•|on\b|\d).*)?$/i;
   function isApplied(card) {
-    // card text is often glued together ("...applicantsApplied · Posted 5 days ago")
-    return /Applied\s*(·|on\b|\d)/.test(card.innerText || "");
+    const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (n.parentElement?.closest(".ljf-badge")) continue;
+      if (APPLIED_TEXT.test(n.textContent.replace(/\s+/g, " ").trim())) return true;
+    }
+    return false;
   }
 
   function findDismissButton(card) {
