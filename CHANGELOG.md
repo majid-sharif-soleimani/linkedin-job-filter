@@ -2,6 +2,15 @@
 
 All notable changes. Newest first. Versions match `manifest.json` → `version`.
 
+## [1.10.8] - 2026-11-09
+### Fixed
+- **"Auto next page" was found unticked after a run** (the run then ended with "Done for this page" and never went on). The setting was
+  read from LinkedIn's page `localStorage`, which did not keep it reliably, and every re-created panel read it again from there. It is
+  now kept in a variable and in `chrome.storage.local` (`autoNext`); an old `localStorage["ljf-autonext"]` value is used once as the start value.
+### Added
+- Ticking "Auto next page" **after** a page has finished now goes to the next page right away and continues from there
+  (`continueWithNextPage()`). The "Done for this page" status says so when the box is not ticked.
+
 ## [1.10.7] - 2026-11-09
 ### Fixed
 - **Auto next page did not always move to the next page.** The Next button is now found first by LinkedIn's

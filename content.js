@@ -14,6 +14,15 @@
 
   let running = false;
   let stopRequested = false;
+  // "Auto next page" setting. Kept in a variable (the panel can be re-created) and in chrome.storage
+  // (LinkedIn's localStorage was not reliable for it).
+  let autoNextOn = false;
+  let lastDonePage = 0; // page number of the last finished run on this page (0 = none), for ticking the box afterwards
+  chrome.storage.local.get("autoNext").then(({ autoNext }) => {
+    if (typeof autoNext === "boolean") autoNextOn = autoNext;
+    else try { autoNextOn = localStorage.getItem("ljf-autonext") === "1"; } catch {}
+    ui.syncAutoNext();
+  }).catch(() => {});
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -699,13 +708,15 @@
       }
       ui.stats(stats, dryRun);
     }
-    ui.status(stopRequested ? "Stopped." : `Done for this page (${opened} jobs).`);
+    ui.status(stopRequested ? "Stopped." : `Done for this page (${opened} jobs).` + (ui.autoNext() ? "" : " Tick \"Auto next page\" to continue with the next page."));
     ui.stats(stats, dryRun);
+    lastDonePage = stopRequested ? 0 : pageNo;
 
     // Auto next page (panel checkbox): go to the next results page and continue until Stop is pressed
     if (!stopRequested && ui.autoNext()) {
       ui.status(`Page ${pageNo} done · going to the next page…`);
       const res = await goToNextPage(pageNo + 1);
+      lastDonePage = 0;
       if (res.ok && !stopRequested && ui.autoNext()) {
         finish();
         return run(pageNo + 1);
@@ -731,6 +742,21 @@
     ui.reset();
     ui.status("No job cards found. Diagnostic (please send this to Claude):");
     ui.log("Diagnostic", JSON.stringify(info), "warn");
+  }
+
+  // "Auto next page" ticked after the run finished a page: go to the next page and run there
+  async function continueWithNextPage() {
+    const pageNo = lastDonePage;
+    lastDonePage = 0;
+    running = true;
+    ui.setRunning(true);
+    ui.status(`Page ${pageNo} done · going to the next page…`);
+    const res = await goToNextPage(pageNo + 1);
+    running = false;
+    if (res.ok && !stopRequested && autoNextOn) return run(pageNo + 1).catch((e) => { ui.status("Error: " + e.message); finish(); });
+    if (!res.ok) ui.log(`⏹ No next page after page ${pageNo}`, res.why, "warn");
+    ui.status(res.ok ? "Stopped." : `Done · no next page after page ${pageNo} (${res.why}).`);
+    finish();
   }
 
   function finish() {
@@ -856,9 +882,12 @@
       });
       statusEl = root.querySelector('[data-r="status"]');
       autoNextEl = root.querySelector('[data-a="autonext"]');
-      try { autoNextEl.checked = localStorage.getItem("ljf-autonext") === "1"; } catch {}
+      autoNextEl.checked = autoNextOn;
       autoNextEl.onchange = () => {
-        try { localStorage.setItem("ljf-autonext", autoNextEl.checked ? "1" : "0"); } catch {}
+        autoNextOn = autoNextEl.checked;
+        chrome.storage.local.set({ autoNext: autoNextOn }).catch(() => {});
+        // ticked after a page has finished: continue right away with the next page
+        if (autoNextOn && !running && lastDonePage > 0) continueWithNextPage();
       };
       statsEl = root.querySelector('[data-r="stats"]');
       logEl = root.querySelector('[data-r="log"]');
@@ -977,9 +1006,11 @@
     }
     // Auto next page checkbox (remembered); read from storage if the panel was closed
     function autoNext() {
-      if (autoNextEl && root && document.body.contains(root)) return autoNextEl.checked;
-      try { return localStorage.getItem("ljf-autonext") === "1"; } catch { return false; }
+      return autoNextOn;
     }
-    return { show, visible, setRunning, reset, status, stats, log, autoNext };
+    function syncAutoNext() {
+      if (autoNextEl) autoNextEl.checked = autoNextOn;
+    }
+    return { show, visible, setRunning, reset, status, stats, log, autoNext, syncAutoNext };
   })();
 })();

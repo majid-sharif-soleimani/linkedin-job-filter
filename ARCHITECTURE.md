@@ -70,7 +70,7 @@ options.js → background: {type:"LJF_SCORE", job:<fake job>}       ("Save & tes
 | `dismissedIds` | `string[]` (last 5000) | content.js `rememberDismissed` | Jobs dismissed by the extension **or by the user's own ✕ clicks** (captured by a document-level click listener). Never processed again. |
 
 Page `localStorage` (LinkedIn origin; per-viewer UI conveniences only, wrapped in try/catch):
-`ljf-panel-pos` (panel x/y), `ljf-panel-expanded` ("1"/"0") and `ljf-autonext` ("1"/"0"). `sessionStorage["ljf-autorun"]` holds the next page number only while a Next click is pending (if the page reloads, the new script continues the run from it). The Next button is `button[data-testid="pagination-controls-next-button-visible"]` (fallback: "Next" near the page-number buttons).
+`ljf-panel-pos` (panel x/y), `ljf-panel-expanded` ("1"/"0") (page localStorage). The "Auto next page" setting is in `chrome.storage.local.autoNext` (boolean; since 1.10.8). `sessionStorage["ljf-autorun"]` holds the next page number only while a Next click is pending (if the page reloads, the new script continues the run from it). The Next button is `button[data-testid="pagination-controls-next-button-visible"]` (fallback: "Next" near the page-number buttons).
 
 ### `settings` object
 
