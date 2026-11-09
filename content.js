@@ -394,44 +394,93 @@
   }
 
   // ================= Next page (auto) =================
-  // Pagination is at the bottom of the lazy list: "1 2 3 … Next". It only renders after scrolling down.
-  // Clicking Next is an in-page (SPA) navigation: the cards change and the URL gets &start=25, 50, …
+  // Pagination is at the bottom of the list: "Previous 1 2 3 Next". Clicking Next is an in-page (SPA)
+  // navigation: the cards change and the URL gets &start=25, 50, …
+  // 2026 markup: button[data-testid="pagination-controls-next-button-visible"] (text "Next"), page buttons
+  // [data-testid^="pagination-indicator-"] (aria-label "Page 2"). Older markup is kept as a fallback.
+  const isPageNumberBtn = (x) =>
+    /^\d+$/.test((x.innerText || x.textContent || "").trim()) || /^(page|sida)\s*\d+$/i.test(x.getAttribute("aria-label") || "");
+
   function findNextButton() {
+    const byTestId =
+      document.querySelector('button[data-testid="pagination-controls-next-button-visible"]') ||
+      [...document.querySelectorAll('[data-testid^="pagination-controls-next"]')].find((b) => !/hidden/i.test(b.dataset.testid || ""));
+    if (byTestId) return byTestId;
     return (
       [...document.querySelectorAll("button, a")].find((b) => {
-        const t = (b.innerText || "").trim();
-        const a = b.getAttribute("aria-label") || "";
-        if (!/^(next|nästa)$/i.test(t) && !/^(view )?next page$/i.test(a)) return false;
-        // must sit next to the page-number buttons, so it isn't some other "Next"
-        return [...(b.parentElement?.querySelectorAll("button, a") || [])].some((x) => /^\d+$/.test((x.innerText || "").trim()));
+        const t = (b.innerText || b.textContent || "").trim();
+        const a = (b.getAttribute("aria-label") || "").trim();
+        if (!/^(next|nästa)$/i.test(t) && !/^(view )?(next|nästa)( page| sida)?$/i.test(a)) return false;
+        // must sit near the page-number buttons, so it isn't some other "Next" (e.g. a carousel)
+        let box = b.parentElement;
+        for (let i = 0; i < 3 && box; i++, box = box.parentElement) {
+          if ([...box.querySelectorAll("button, a")].some((x) => x !== b && isPageNumberBtn(x))) return true;
+        }
+        return false;
       }) || null
     );
   }
 
-  async function goToNextPage() {
-    const firstBefore = getCards().map(cardJobId)[0];
-    let next = null;
-    for (let i = 0; i < 8 && !(next = findNextButton()); i++) {
-      const cards = getCards();
-      cards[cards.length - 1]?.scrollIntoView({ block: "end" });
-      await sleep(600);
+  // Scroll the job list (its own scroll box, and the window) to the bottom so the pagination renders
+  function scrollListToBottom() {
+    const first = getCards()[0];
+    for (let el = first?.parentElement; el && el !== document.body; el = el.parentElement) {
+      const oy = getComputedStyle(el).overflowY;
+      if (/(auto|scroll)/.test(oy) && el.scrollHeight > el.clientHeight + 20) {
+        el.scrollTop = el.scrollHeight;
+        break;
+      }
     }
-    if (!next || next.disabled || next.getAttribute("aria-disabled") === "true") return false;
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    const cards = getCards().filter((c) => c.offsetParent);
+    cards[cards.length - 1]?.scrollIntoView({ block: "end" });
+  }
+
+  const startParam = () => new URL(location.href).searchParams.get("start") || "0";
+  const pageSignature = () => startParam() + "|" + [...new Set(getCards().map(cardJobId))].slice(0, 3).join(",");
+  const noResultsShown = () => /no (matching )?(results|jobs) found|inga (resultat|jobb)/i.test(document.querySelector("main")?.innerText || document.body.innerText || "");
+
+  // Returns { ok: true } or { ok: false, why: "…" } (the reason is shown in the panel log)
+  async function goToNextPage(nextPageNo) {
+    const sigBefore = pageSignature();
+    const startBefore = startParam();
+    let next = null;
+    for (let i = 0; i < 10 && !(next = findNextButton()); i++) {
+      scrollListToBottom();
+      await sleep(700);
+    }
+    if (!next) return { ok: false, why: "Next button not found (last page?)" };
+    if (next.disabled || next.getAttribute("aria-disabled") === "true") return { ok: false, why: "Next button is disabled (last page)" };
+
     // if LinkedIn ever does a full page load instead, the new copy of this script continues (see bottom)
-    try { sessionStorage.setItem("ljf-autorun", "1"); } catch {}
-    next.click();
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
-      await sleep(400);
-      const first = getCards().map(cardJobId)[0];
-      if (first && first !== firstBefore) {
-        await sleep(1500); // let the new page settle
-        try { sessionStorage.removeItem("ljf-autorun"); } catch {}
-        return true;
+    try { sessionStorage.setItem("ljf-autorun", String(nextPageNo)); } catch {}
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      next = findNextButton() || next;
+      next.scrollIntoView({ block: "center" });
+      await sleep(300);
+      next.click();
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        await sleep(400);
+        if (pageSignature() !== sigBefore && getCards().length) {
+          await sleep(1500); // let the new page settle
+          try { sessionStorage.removeItem("ljf-autorun"); } catch {}
+          return { ok: true };
+        }
+      }
+      // URL moved on but LinkedIn shows "No results found": a full reload of the same URL usually fixes it;
+      // the script on the reloaded page continues the run (ljf-autorun)
+      if (startParam() !== startBefore) {
+        if (!getCards().length && noResultsShown()) {
+          location.reload();
+          await sleep(60000); // the page is going away
+          return { ok: false, why: "page reload did not happen" };
+        }
+        break; // the page did move on: don't click Next a second time (it would skip a page)
       }
     }
     try { sessionStorage.removeItem("ljf-autorun"); } catch {}
-    return false;
+    return { ok: false, why: `clicked Next but the page did not change (start=${startParam()})` };
   }
 
   // ================= Cache (avoid paying twice for the same job) =================
@@ -656,12 +705,13 @@
     // Auto next page (panel checkbox): go to the next results page and continue until Stop is pressed
     if (!stopRequested && ui.autoNext()) {
       ui.status(`Page ${pageNo} done · going to the next page…`);
-      const moved = await goToNextPage();
-      if (moved && !stopRequested && ui.autoNext()) {
+      const res = await goToNextPage(pageNo + 1);
+      if (res.ok && !stopRequested && ui.autoNext()) {
         finish();
         return run(pageNo + 1);
       }
-      ui.status(stopRequested ? "Stopped." : moved ? "Stopped." : `Done · no next page after page ${pageNo}.`);
+      if (!res.ok) ui.log(`⏹ No next page after page ${pageNo}`, res.why, "warn");
+      ui.status(stopRequested || res.ok ? "Stopped." : `Done · no next page after page ${pageNo} (${res.why}).`);
     }
     finish();
   }
@@ -757,11 +807,18 @@
 
   // If "Next" ever caused a full page load, pick up where we left off
   try {
-    if (window === window.top && sessionStorage.getItem("ljf-autorun") === "1") {
+    const autorun = window === window.top ? sessionStorage.getItem("ljf-autorun") : null;
+    if (autorun) {
       sessionStorage.removeItem("ljf-autorun");
-      setTimeout(() => {
-        if (!running && getCards().length && ui.autoNext()) run(2).catch((e) => { ui.status("Error: " + e.message); finish(); });
-      }, 3000);
+      const pageNo = Math.max(2, parseInt(autorun, 10) || 2);
+      // wait until the cards of the reloaded page are there (up to ~20 s)
+      let tries = 0;
+      const tick = () => {
+        if (running || !ui.autoNext()) return;
+        if (getCards().length) run(pageNo).catch((e) => { ui.status("Error: " + e.message); finish(); });
+        else if (++tries < 20) setTimeout(tick, 1000);
+      };
+      setTimeout(tick, 2000);
     }
   } catch {}
 

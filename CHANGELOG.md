@@ -2,6 +2,18 @@
 
 All notable changes. Newest first. Versions match `manifest.json` → `version`.
 
+## [1.10.7] - 2026-11-09
+### Fixed
+- **Auto next page did not always move to the next page.** The Next button is now found first by LinkedIn's
+  `data-testid="pagination-controls-next-button-visible"` (fallback: text/aria-label "Next" near the page-number buttons, which now
+  also match `aria-label="Page N"`). Before clicking, the list's own scroll box and the window are scrolled to the bottom (the old code
+  called `scrollIntoView` on the last card, which does nothing when that card is hidden by the virtual list).
+- A page change is now detected by the URL `start` value or the first job ids changing; if nothing happens within 10 s, Next is clicked
+  once more (only while the URL has not moved). If LinkedIn moves to the next page but shows "No results found", the page is reloaded and the
+  run continues there (`sessionStorage["ljf-autorun"]` now holds the page number; the reloaded script waits up to ~20 s for the cards).
+- When the run stops at the end of a page, the panel log and status now say why (e.g. "Next button not found (last page?)",
+  "Next button is disabled", "clicked Next but the page did not change").
+
 ## [1.10.6] - 2026-11-06
 ### Docs
 - Criteria guide in `settings.js`: example "Remote jobs" rule (remote only counts if the ad hires from your country or from anywhere / your region).
